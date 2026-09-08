@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NMWDI Usage Log</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Roboto+Slab:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#213539;
+    --panel:#2A4145;
+    --panel-raised:#354F53;
+    --panel-line:#4A6B6E;
+    --paper:#F3F7F7;
+    --paper-dim:#CCDBDC;
+    --paper-faint:#9BB2B4;
+    --brass:#E8A33D;
+    --brass-dim:#C4842A;
+    --brass-tint:rgba(232,163,61,0.16);
+    --teal:#5FC2B0;
+    --teal-dim:#39907F;
+    --teal-tint:rgba(95,194,176,0.16);
+    --rust:#E37E68;
+    --rust-tint:rgba(227,126,104,0.16);
+    --font-head:'Roboto Slab', Georgia, serif;
+    --font-body:'IBM Plex Sans', -apple-system, sans-serif;
+    --font-mono:'IBM Plex Mono', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; font-family:var(--font-body); color:var(--paper); background:var(--ink);
+  }
+  #app{display:grid; grid-template-columns:270px 1fr; min-height:100vh;}
+
+  /* ---------------- Sidebar / ledger rail ---------------- */
+  #rail{
+    background:var(--panel); border-right:1px solid var(--panel-line);
+    display:flex; flex-direction:column; min-height:100vh; position:sticky; top:0;
+  }
+  #rail-head{padding:20px 18px 14px; border-bottom:1px solid var(--panel-line);}
+  #rail-head h1{font-family:var(--font-head); font-size:18px; margin:0 0 4px; font-weight:600; letter-spacing:0.2px;}
+  #rail-head .sub{font-size:11px; color:var(--paper-faint); line-height:1.5;}
+  #quarter-list{flex:1; overflow-y:auto; padding:10px 0;}
+  .q-item{
+    display:block; width:100%; text-align:left; background:none; border:none; cursor:pointer;
+    padding:11px 18px; color:var(--paper-dim); border-left:3px solid transparent; font-family:var(--font-body);
+  }
+  .q-item:hover{background:var(--panel-raised);}
+  .q-item.active{background:var(--panel-raised); border-left-color:var(--brass); color:var(--paper);}
+  .q-item .id{font-family:var(--font-mono); font-size:13px; font-weight:600;}
+  .q-item .range{font-size:10.5px; color:var(--paper-faint); margin-top:2px;}
+  #rail-foot{padding:14px 18px 18px; border-top:1px solid var(--panel-line);}
+  .rail-btn{
+    display:block; width:100%; text-align:center; font-family:var(--font-body); font-size:12.5px; font-weight:600;
+    background:var(--brass); color:#241505; border:none; border-radius:3px; padding:10px 12px; cursor:pointer; margin-bottom:8px;
+  }
+  .rail-btn:hover{background:#F0AF52;}
+  .rail-btn.ghost{background:none; border:1px solid var(--panel-line); color:var(--paper-dim);}
+  .rail-btn.ghost:hover{border-color:var(--teal); color:var(--paper);}
+  #empty-rail{padding:16px 18px; font-size:12px; color:var(--paper-faint); line-height:1.6;}
+
+  /* ---------------- Main ---------------- */
+  #main{padding:26px 34px 60px; max-width:1080px;}
+  #main-head{display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin-bottom:18px; flex-wrap:wrap;}
+  #main-head h2{font-family:var(--font-head); font-size:22px; margin:0; font-weight:600;}
+  #main-head .period{font-family:var(--font-mono); font-size:12px; color:var(--teal); margin-top:4px;}
+  #pop-toggle{display:inline-flex; border:1px solid var(--panel-line); border-radius:4px; overflow:hidden;}
+  #pop-toggle button{
+    font-family:var(--font-body); font-size:12px; font-weight:600; padding:8px 14px; border:none; cursor:pointer;
+    background:var(--panel); color:var(--paper-faint);
+  }
+  #pop-toggle button.active{background:var(--brass); color:#241505;}
+  #pop-toggle button:not(.active):hover{background:var(--panel-raised); color:var(--paper);}
+  #basemap-picker button{
+    font-family:var(--font-body); font-size:11px; font-weight:600; padding:5px 10px; border:1px solid var(--panel-line);
+    cursor:pointer; background:var(--panel); color:var(--paper-faint); border-radius:3px;
+  }
+  #basemap-picker button.active{background:var(--teal); color:#0F2621; border-color:var(--teal);}
+  #basemap-picker button:not(.active):hover{color:var(--paper); border-color:var(--teal);}
+  .map-holder{height:320px; border-radius:4px; overflow:hidden; border:1px solid var(--panel-line); background:var(--panel-raised);}
+  .leaflet-container{background:var(--panel-raised) !important; font-family:var(--font-body) !important;}
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip{background:var(--panel-raised); color:var(--paper);}
+  .leaflet-control-attribution{background:rgba(22,41,47,0.8) !important; color:var(--paper-faint) !important;}
+  .leaflet-control-attribution a{color:var(--teal) !important;}
+  #tabs{display:flex; gap:4px; border-bottom:1px solid var(--panel-line); margin-bottom:22px; flex-wrap:wrap;}
+  .tab-btn{
+    font-family:var(--font-body); font-size:12.5px; font-weight:600; color:var(--paper-faint);
+    background:none; border:none; padding:10px 14px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .tab-btn:hover{color:var(--paper);}
+  .tab-btn.active{color:var(--brass); border-bottom-color:var(--brass);}
+  .tab-pane{display:none;}
+  .tab-pane.active{display:block;}
+
+  .gauge-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px; margin-bottom:24px;}
+  .gauge{background:var(--panel); border:1px solid var(--panel-line); border-radius:4px; padding:14px 16px;}
+  .gauge .n{font-family:var(--font-mono); font-size:24px; font-weight:600; color:var(--paper); line-height:1.1;}
+  .gauge .l{font-size:11px; color:var(--paper-faint); margin-top:5px; line-height:1.4;}
+  .gauge.amber .n{color:var(--brass);}
+  .gauge.teal .n{color:var(--teal);}
+  .gauge.rust .n{color:var(--rust);}
+
+  .section{margin-bottom:30px;}
+  .section h3{
+    font-family:var(--font-head); font-size:14.5px; font-weight:600; margin:0 0 12px; color:var(--paper);
+    padding-bottom:8px; border-bottom:1px solid var(--panel-line);
+  }
+  .section h3 .hint{font-family:var(--font-body); font-weight:400; font-size:11px; color:var(--paper-faint);}
+  .bar-row{margin-bottom:9px;}
+  .bar-row .lbl{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; margin-bottom:3px;}
+  .bar-row .lbl .t{color:var(--paper-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .bar-row .lbl .v{font-family:var(--font-mono); font-size:11px; color:var(--paper-faint); flex-shrink:0;}
+  .bar-track{height:6px; background:var(--panel-raised); border-radius:3px; overflow:hidden;}
+  .bar-fill{height:100%; background:var(--brass); border-radius:3px;}
+  .bar-fill.teal{background:var(--teal);}
+  .bar-fill.rust{background:var(--rust);}
+  .bar-row.clickable{cursor:pointer;}
+  .bar-row.clickable:hover .lbl .t{color:var(--brass); text-decoration:underline;}
+  .bar-row .sub{font-size:10.5px; color:var(--paper-faint); margin-top:2px;}
+
+  .two-col{display:grid; grid-template-columns:1fr 1fr; gap:28px;}
+  @media (max-width:820px){.two-col{grid-template-columns:1fr;}}
+
+  table.data-table{width:100%; border-collapse:collapse; font-size:12px;}
+  table.data-table th{
+    text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.3px; color:var(--paper-faint);
+    padding:6px 8px; border-bottom:1px solid var(--panel-line); font-weight:600; cursor:pointer; white-space:nowrap;
+  }
+  table.data-table th:hover{color:var(--brass);}
+  table.data-table td{padding:6px 8px; border-bottom:1px solid var(--panel-line); color:var(--paper-dim); vertical-align:top;}
+  table.data-table td.num{font-family:var(--font-mono); text-align:right; white-space:nowrap;}
+  table.data-table tr:hover td{background:var(--panel-raised);}
+
+  details.report-block{background:var(--panel); border:1px solid var(--panel-line); border-radius:4px; margin-bottom:10px;}
+  details.report-block summary{
+    padding:11px 16px; cursor:pointer; font-family:var(--font-body); font-weight:600; font-size:13px;
+    display:flex; justify-content:space-between; gap:10px; list-style:none;
+  }
+  details.report-block summary::-webkit-details-marker{display:none;}
+  details.report-block summary .rowcount{font-family:var(--font-mono); font-weight:400; font-size:11px; color:var(--paper-faint);}
+  details.report-block .body{padding:0 16px 16px; overflow-x:auto;}
+
+  .note{font-size:11.5px; color:var(--brass); background:var(--brass-tint); border-radius:3px; padding:9px 11px; margin-top:8px; line-height:1.55;}
+  .note.rust{color:var(--rust); background:var(--rust-tint);}
+  .note.teal{color:var(--teal); background:var(--teal-tint);}
+
+  /* ---------------- Upload dropzone / modal ---------------- */
+  #upload-backdrop{position:fixed; inset:0; background:rgba(15,30,36,0.7); z-index:900; display:none; align-items:center; justify-content:center;}
+  #upload-backdrop.open{display:flex;}
+  #upload-modal{
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:6px; width:560px; max-width:92vw;
+    max-height:88vh; overflow-y:auto; padding:24px 26px;
+  }
+  #upload-modal h3{font-family:var(--font-head); font-size:17px; margin:0 0 6px;}
+  #upload-modal .sub{font-size:12px; color:var(--paper-faint); margin-bottom:16px; line-height:1.5;}
+  #dropzone{
+    border:2px dashed var(--panel-line); border-radius:5px; padding:30px 18px; text-align:center;
+    color:var(--paper-faint); font-size:12.5px; cursor:pointer;
+  }
+  #dropzone.drag{border-color:var(--brass); color:var(--brass); background:var(--brass-tint);}
+  #dropzone .icon{font-size:26px; margin-bottom:8px;}
+  #file-input{display:none;}
+  #upload-status{margin-top:14px; font-size:12px; color:var(--paper-dim); max-height:200px; overflow-y:auto;}
+  .file-status-row{display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--panel-line); gap:10px;}
+  .file-status-row .name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .file-status-row .tag{font-family:var(--font-mono); font-size:10.5px; flex-shrink:0;}
+  .file-status-row .tag.ok{color:var(--teal);}
+  .file-status-row .tag.warn{color:var(--rust);}
+  #upload-form-row{margin-top:16px; display:none;}
+  #upload-form-row.show{display:block;}
+  #upload-form-row label{display:block; font-size:11px; color:var(--paper-faint); margin-bottom:5px;}
+  #upload-form-row input{
+    width:100%; padding:9px 10px; font-family:var(--font-mono); font-size:13px; background:var(--panel-raised);
+    border:1px solid var(--panel-line); color:var(--paper); border-radius:3px;
+  }
+  #upload-actions{display:flex; gap:8px; margin-top:16px;}
+  .btn{font-size:12.5px; font-weight:600; padding:9px 16px; border-radius:3px; cursor:pointer; border:none; flex:1; font-family:var(--font-body);}
+  .btn-primary{background:var(--brass); color:#241505;}
+  .btn-primary:hover{background:#F0AF52;}
+  .btn-primary:disabled{opacity:0.4; cursor:not-allowed;}
+  .btn-secondary{background:var(--panel-raised); color:var(--paper-dim); border:1px solid var(--panel-line);}
+  .btn-secondary:hover{color:var(--paper);}
+
+  ::-webkit-scrollbar{width:8px; height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--panel-line); border-radius:4px;}
+
+  #splash{padding:60px 20px; text-align:center; color:var(--paper-faint);}
+  #splash .icon{font-size:40px; margin-bottom:14px;}
+  #splash h2{font-family:var(--font-head); color:var(--paper); font-size:20px; margin:0 0 8px;}
+  #splash p{font-size:13px; max-width:420px; margin:0 auto 20px; line-height:1.6;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="rail">
+    <div id="rail-head">
+      <h1>NMWDI Usage Log</h1>
+      <div class="sub">Quarterly readings from GA4 exports of catalog.newmexicowaterdata.org</div>
+    </div>
+    <div id="quarter-list"></div>
+    <div id="rail-foot">
+      <button class="rail-btn" id="open-upload-btn">+ Log a new quarter</button>
+      <button class="rail-btn ghost" id="annual-btn">Annual summary</button>
+      <div style="height:10px;"></div>
+      <button class="rail-btn ghost" id="export-log-btn">⇩ Export full log (.json)</button>
+      <button class="rail-btn ghost" id="import-log-btn">⇧ Import log file</button>
+      <input type="file" id="import-log-input" accept=".json" style="display:none;">
+      <div id="storage-status" style="font-size:10.5px; color:var(--paper-faint); line-height:1.5; margin-top:10px;"></div>
+    </div>
+  </div>
+  <div id="main">
+    <div id="splash">
+      <div class="icon">📓</div>
+      <h2>No readings logged yet</h2>
+      <p>Upload a quarterly GA4 export (the zip of CSVs, or the individual files) to start the log. Once you have a few quarters in, export the log as a backup file — that's what brings everything back next time you open this tool.</p>
+      <button class="rail-btn" id="splash-upload-btn" style="width:auto; padding:11px 22px;">+ Log a new quarter</button>
+    </div>
+  </div>
+</div>
+
+<div id="upload-backdrop">
+  <div id="upload-modal">
+    <h3>Log a quarterly export</h3>
+    <div class="sub">Drop the zip GA4 gives you, or the individual CSVs — either works. Files are matched by their internal report header, not filename, so they can be renamed freely.</div>
+    <div id="dropzone">
+      <div class="icon">⇪</div>
+      <div>Drop files here, or <u>choose files</u></div>
+      <input type="file" id="file-input" multiple accept=".zip,.csv">
+    </div>
+    <div id="upload-progress" style="display:none; font-size:12px; color:var(--teal); margin-top:12px; font-family:var(--font-mono);"></div>
+    <div id="upload-error" style="display:none; font-size:12px; color:var(--rust); background:var(--rust-tint); border-radius:3px; padding:9px 11px; margin-top:12px; line-height:1.5;"></div>
+    <div id="upload-status"></div>
+    <div id="upload-form-row">
+      <label for="quarter-id-input">Quarter label</label>
+      <input type="text" id="quarter-id-input" placeholder="2026-Q2">
+    </div>
+    <div id="upload-actions" style="display:none;">
+      <button class="btn btn-secondary" id="cancel-upload-btn">Cancel</button>
+      <button class="btn btn-primary" id="save-upload-btn" disabled>Save this quarter</button>
+    </div>
+  </div>
+</div>
+
+<div id="global-toast" style="display:none; position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#2A1410; color:#F0AF52; border:1px solid var(--rust); border-radius:5px; padding:12px 18px; font-family:var(--font-body); font-size:12.5px; max-width:520px; z-index:1000; box-shadow:0 8px 24px rgba(0,0,0,0.4);"></div>
+
+<script>
+/* ============================================================
+   REPORT REGISTRY — maps a GA4 export's internal report header
+   (not its filename) to a stable id used throughout this tool.
+   ============================================================ */
+const REPORT_REGISTRY_RAW = {
+  'Report_Part2-Popular_Tags': { id: 'tags', label: 'Popular Tags', category: 'search' },
+  'Report_Part2-Popular_Resources': { id: 'resources', label: 'Popular Resources', category: 'engagement' },
+  'Report_Part2-Popular_Orgs': { id: 'orgs', label: 'Popular Organizations', category: 'search' },
+  'Report_Part2-Popular_Apps': { id: 'apps', label: 'Popular Applications', category: 'engagement' },
+  'Report_Part2-Popular_Formats': { id: 'formats', label: 'Popular Formats', category: 'search' },
+  'Report_Part1-Search_terms': { id: 'searchTerms', label: 'Search Terms', category: 'search' },
+  'Report_Part1-SearchTerm_By_PageTitle': { id: 'searchTermsByPage', label: 'Search Terms by Page', category: 'search' },
+  'Report_Part2-SearchTerms_ByState_NoBlank': { id: 'searchTermsByState', label: 'Search Terms by State', category: 'search' },
+  'Report_Part2-Bounding_Box_Searches': { id: 'bboxSearches', label: 'Bounding Box Searches', category: 'search' },
+  'Report_Part1-Click_By_Page': { id: 'clicksByPage', label: 'Clicks by Page', category: 'interaction' },
+  'Report_Part1-EventClick_3step': { id: 'eventClick3step', label: 'Event Click (3-step)', category: 'interaction' },
+  'Report_Part2-3step_Event_Download': { id: 'threeStepDownload', label: '3-step Event Download', category: 'downloads' },
+  'Report_Part1-Downloads': { id: 'downloads', label: 'Downloads', category: 'downloads' },
+  'Report_Part1-File Downloads': { id: 'fileDownloads', label: 'File Downloads', category: 'downloads' },
+  'Report_Part2-FileNameDownload': { id: 'fileNameDownload', label: 'File Name Download', category: 'downloads' },
+  'Report_Part1-File_Download_By_City': { id: 'fileDownloadByCity', label: 'File Downloads by City', category: 'downloads' },
+  'Report_Part1-Engagement_By_City': { id: 'engagementByCity', label: 'Engagement by City', category: 'engagement' },
+  'Report_Part1-Engagement_By_New': { id: 'engagementByNew', label: 'Engagement: New vs Established', category: 'engagement' },
+  'Report_Part1-Engagement_By_Page': { id: 'engagementByPage', label: 'Engagement by Page', category: 'engagement' },
+  'Report_Part2-90percentScroll': { id: 'scroll90', label: '90% Scroll by Page', category: 'engagement' },
+  'Site Errors-All Errors Table': { id: 'errors', label: 'Site Errors', category: 'quality' },
+};
+function normalizeKey(s) { return String(s).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+const REPORT_REGISTRY = {};
+for (const k in REPORT_REGISTRY_RAW) REPORT_REGISTRY[normalizeKey(k)] = REPORT_REGISTRY_RAW[k];
+const REPORT_ORDER = Object.values(REPORT_REGISTRY_RAW).map(r => r.id);
+
+/* ============================================================
+   GENERIC PARSER — turns raw GA4 export CSV text into rows of
+   {dims, metrics}, using the grand-total row (always ending in
+   the literal text "Grand total") to locate the header, and an
+   optional "Segment / US Users / NM Users / Totals" row above it
+   to know which metric columns belong to which population.
+   ============================================================ */
+function parseCsvLine(line) {
+  const res = Papa.parse(line);
+  return (res.data && res.data[0]) ? res.data[0] : [];
+}
+function detectPopulation(cell) {
+  const c = String(cell || '').trim().toLowerCase();
+  if (c === 'us users') return 'us';
+  if (c === 'nm users') return 'nm';
+  if (c === 'totals' || c === 'total') return 'total';
+  return null;
+}
+function metricType(headerName) {
+  const h = String(headerName || '').toLowerCase();
+  if (h.includes('event count per active user')) return 'per_user';
+  if (h.includes('event count')) return 'count';
+  if (h.includes('total users')) return 'users';
+  if (h.includes('active users')) return 'users';
+  return null;
+}
+function isDimensionHeader(headerName) {
+  const h = String(headerName || '').toLowerCase().trim();
+  if (h === 'event name') return true;
+  return metricType(headerName) === null;
+}
+function parseReportText(rawText, filenameHint) {
+  const allLines = rawText.split(/\r\n|\n/);
+  let reportKeyLine = null, period = null;
+  for (const l of allLines.slice(0, 6)) {
+    const m1 = l.match(/^#\s*(.+)$/);
+    if (m1 && !/^-+$/.test(m1[1].trim()) && !/catalog\.newmexicowaterdata\.org/i.test(m1[1])) {
+      const mdate = m1[1].trim().match(/^(\d{8})-(\d{8})$/);
+      if (mdate) period = { start: mdate[1], end: mdate[2] };
+      else if (!reportKeyLine) reportKeyLine = m1[1].trim();
+    }
+  }
+  const normKeyStr = reportKeyLine ? normalizeKey(reportKeyLine) : normalizeKey(filenameHint || '');
+  const registryEntry = REPORT_REGISTRY[normKeyStr] || null;
+
+  const lines = allLines.filter(l => l.trim() !== '' && !l.startsWith('#'));
+  const parsedLines = lines.map(parseCsvLine);
+
+  let gIdx = -1;
+  for (let i = 0; i < parsedLines.length; i++) {
+    const row = parsedLines[i];
+    if (row.length && String(row[row.length - 1]).trim().toLowerCase() === 'grand total') { gIdx = i; break; }
+  }
+  if (gIdx < 1) {
+    return { reportKeyLine, registryEntry, period, error: 'Could not locate a "Grand total" row in this file.', filenameHint };
+  }
+
+  const header = parsedLines[gIdx - 1];
+  const auxRow = gIdx - 2 >= 0 ? parsedLines[gIdx - 2] : null;
+  const auxIsSegmentRow = auxRow && auxRow.some(c => detectPopulation(c) !== null);
+
+  const colInfo = header.map((h, i) => {
+    if (isDimensionHeader(h)) return { index: i, name: (h || '').trim(), dimension: true };
+    let pop = (auxIsSegmentRow && auxRow[i] !== undefined) ? detectPopulation(auxRow[i]) : null;
+    if (!pop) pop = 'total';
+    return { index: i, name: (h || '').trim(), dimension: false, population: pop, metric: metricType(h) };
+  });
+  const dimCols = colInfo.filter(c => c.dimension);
+  const metricCols = colInfo.filter(c => !c.dimension);
+
+  function rowToRecord(rawRow) {
+    const dims = {};
+    dimCols.forEach(c => { dims[c.name] = String(rawRow[c.index] !== undefined ? rawRow[c.index] : '').trim(); });
+    const metrics = {};
+    metricCols.forEach(c => {
+      const key = `${c.population}_${c.metric}`;
+      const v = parseFloat(rawRow[c.index]);
+      metrics[key] = isNaN(v) ? 0 : v;
+    });
+    return { dims, metrics };
+  }
+
+  const grandTotal = rowToRecord(parsedLines[gIdx]).metrics;
+  const dataRows = parsedLines.slice(gIdx + 1).filter(r => r.length && r.some(c => c !== ''));
+  const rows = dataRows.map(rowToRecord);
+
+  return {
+    reportKeyLine, registryEntry, period, filenameHint,
+    dimCols: dimCols.map(c => c.name), metricCols: metricCols.map(c => `${c.population}_${c.metric}`),
+    grandTotal, rows, rowCount: rows.length,
+  };
+}
+
+function primaryTotal(metrics) {
+  if (!metrics) return 0;
+  if ('us_count' in metrics || 'nm_count' in metrics) return (metrics.us_count || 0);
+  if ('total_count' in metrics) return metrics.total_count;
+  if ('us_users' in metrics || 'nm_users' in metrics) return (metrics.us_users || 0);
+  const nums = Object.values(metrics).filter(v => typeof v === 'number');
+  return nums.length ? nums[0] : 0;
+}
+// NM users are a SUBSET of US users in this data (every row: nm_count <= us_count), not a
+// separate complementary segment — so there's no meaningful "combined" total. Instead the
+// person picks which population's numbers they want to see: New Mexico, or All U.S.
+function displayValue(metrics) {
+  if (!metrics) return 0;
+  const mode = APP.populationMode || 'nm';
+  if (mode === 'nm') {
+    if ('nm_count' in metrics) return metrics.nm_count;
+    if ('nm_users' in metrics) return metrics.nm_users;
+    if ('total_count' in metrics) return metrics.total_count;
+  } else {
+    if ('us_count' in metrics) return metrics.us_count;
+    if ('us_users' in metrics) return metrics.us_users;
+    if ('total_count' in metrics) return metrics.total_count;
+  }
+  const nums = Object.values(metrics).filter(v => typeof v === 'number');
+  return nums.length ? nums[0] : 0;
+}
+function populationLabel() { return (APP.populationMode || 'nm') === 'nm' ? 'New Mexico users' : 'All U.S. users'; }
+
+/* ============================================================
+   STORAGE LAYER
+   In-memory (APP.quarters) is the source of truth for this session
+   — it always works. window.storage is used as a best-effort bonus
+   so things may already be there next time, but nothing here ever
+   depends on it succeeding. Export / Import the log file for
+   durable, guaranteed persistence across sessions and devices.
+   ============================================================ */
+const STORAGE_INDEX_KEY = 'ga4:quarters:index';
+function quarterStorageKey(id) { return `ga4:quarter:${id}`; }
+let STORAGE_OK = null; // null = unknown, true/false once checked
+
+async function loadIndex() {
+  if (STORAGE_OK === false) return [];
+  try {
+    const res = await window.storage.get(STORAGE_INDEX_KEY, false);
+    return res ? JSON.parse(res.value) : [];
+  } catch (e) { return []; }
+}
+async function saveIndexBestEffort(list) {
+  if (STORAGE_OK === false) return;
+  try { await window.storage.set(STORAGE_INDEX_KEY, JSON.stringify(list), false); } catch (e) { /* best effort only */ }
+}
+async function loadQuarterFromStorage(id) {
+  if (STORAGE_OK === false) return null;
+  try {
+    const res = await window.storage.get(quarterStorageKey(id), false);
+    return res ? JSON.parse(res.value) : null;
+  } catch (e) { return null; }
+}
+async function saveQuarterBestEffort(record) {
+  if (STORAGE_OK === false) return;
+  try { await window.storage.set(quarterStorageKey(record.id), JSON.stringify(record), false); } catch (e) { /* best effort only */ }
+}
+async function deleteQuarterFromStorageBestEffort(id) {
+  if (STORAGE_OK === false) return;
+  try { await window.storage.delete(quarterStorageKey(id), false); } catch (e) { /* best effort only */ }
+}
+
+function indexEntryFor(record) {
+  return {
+    id: record.id, periodStart: record.periodStart, periodEnd: record.periodEnd,
+    savedAt: record.savedAt, reportIds: Object.keys(record.reports),
+    grandTotals: Object.fromEntries(Object.entries(record.reports).map(([k, v]) => [k, v.grandTotal])),
+  };
+}
+
+// APP.quarters holds full records in memory; APP.index is the lightweight summary list.
+async function saveQuarter(record) {
+  APP.quarters[record.id] = record;
+  const idx = APP.index.findIndex(q => q.id === record.id);
+  const entry = indexEntryFor(record);
+  if (idx >= 0) APP.index[idx] = entry; else APP.index.push(entry);
+  APP.index.sort((a, b) => a.id.localeCompare(b.id));
+  saveQuarterBestEffort(record);
+  saveIndexBestEffort(APP.index);
+}
+async function loadQuarter(id) {
+  if (APP.quarters[id]) return APP.quarters[id];
+  const fromStorage = await loadQuarterFromStorage(id);
+  if (fromStorage) APP.quarters[id] = fromStorage;
+  return fromStorage;
+}
+async function deleteQuarter(id) {
+  delete APP.quarters[id];
+  APP.index = APP.index.filter(q => q.id !== id);
+  deleteQuarterFromStorageBestEffort(id);
+  saveIndexBestEffort(APP.index);
+}
+
+/* ---- Export / Import the whole log as one JSON file: the reliable path ---- */
+async function exportFullLog() {
+  const allIds = APP.index.map(q => q.id);
+  const quarters = {};
+  for (const id of allIds) quarters[id] = await loadQuarter(id);
+  const payload = { exportedAt: new Date().toISOString(), index: APP.index, quarters };
+  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `nmwdi_usage_log_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+}
+async function importFullLog(file) {
+  const text = await file.text();
+  let payload;
+  try { payload = JSON.parse(text); } catch (e) { throw new Error('That file isn\'t valid JSON — is it a log file exported from this tool?'); }
+  if (!payload.quarters || !payload.index) throw new Error('That JSON doesn\'t look like a log file exported from this tool.');
+  let added = 0, skipped = 0;
+  for (const id in payload.quarters) {
+    if (APP.quarters[id] && !confirm(`"${id}" is already in your current log. Overwrite it with the imported version?`)) { skipped++; continue; }
+    APP.quarters[id] = payload.quarters[id];
+    const idx = APP.index.findIndex(q => q.id === id);
+    const entry = indexEntryFor(payload.quarters[id]);
+    if (idx >= 0) APP.index[idx] = entry; else APP.index.push(entry);
+    saveQuarterBestEffort(payload.quarters[id]);
+    added++;
+  }
+  APP.index.sort((a, b) => a.id.localeCompare(b.id));
+  saveIndexBestEffort(APP.index);
+  return { added, skipped };
+}
+
+/* ============================================================
+   GLOBAL ERROR SURFACING — so a failure anywhere becomes visible
+   instead of silently doing nothing.
+   ============================================================ */
+function showToast(message, isError) {
+  const el = document.getElementById('global-toast');
+  el.textContent = message;
+  el.style.borderColor = isError ? 'var(--rust)' : 'var(--teal)';
+  el.style.color = isError ? '#F0AF52' : 'var(--teal)';
+  el.style.display = 'block';
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => { el.style.display = 'none'; }, 9000);
+}
+window.addEventListener('error', e => { showToast('Something went wrong: ' + (e.message || 'unknown error'), true); });
+window.addEventListener('unhandledrejection', e => {
+  const msg = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
+  showToast('Something went wrong: ' + msg, true);
+});
+async function checkStorageAvailable() {
+  if (!window.storage || typeof window.storage.set !== 'function') {
+    STORAGE_OK = false;
+    return false;
+  }
+  try {
+    const probeKey = 'ga4:__probe__';
+    await window.storage.set(probeKey, '1', false);
+    await window.storage.delete(probeKey, false);
+    STORAGE_OK = true;
+    return true;
+  } catch (e) {
+    STORAGE_OK = false;
+    return false;
+  }
+}
+
+/* ============================================================
+   SMALL HELPERS: labels, escaping, dimension extraction
+   ============================================================ */
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtNum(n) { return (n || 0).toLocaleString(); }
+function fmtDate(d8) {
+  if (!d8 || d8.length !== 8) return d8 || '—';
+  return `${d8.slice(0, 4)}-${d8.slice(4, 6)}-${d8.slice(6)}`;
+}
+function quarterOfMonth(m) { return Math.floor((m - 1) / 3) + 1; }
+function quarterLabelFromPeriod(startStr) {
+  if (!startStr || startStr.length !== 8) return '';
+  const y = startStr.slice(0, 4), m = parseInt(startStr.slice(4, 6), 10);
+  return `${y}-Q${quarterOfMonth(m)}`;
+}
+function modePeriod(parsedResults) {
+  const counts = {};
+  for (const r of parsedResults) {
+    if (!r.period) continue;
+    const key = r.period.start + '_' + r.period.end;
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  let best = null, bestN = 0;
+  for (const k in counts) if (counts[k] > bestN) { best = k; bestN = counts[k]; }
+  if (!best) return null;
+  const [start, end] = best.split('_');
+  return { start, end };
+}
+function unquotePlus(s) {
+  try { return decodeURIComponent(String(s).replace(/\+/g, ' ')); } catch (e) { return String(s).replace(/\+/g, ' '); }
+}
+function extractParam(path, name) {
+  const m = String(path || '').match(new RegExp('[?&]' + name + '=([^&]*)'));
+  return m ? unquotePlus(m[1]) : null;
+}
+function extractTags(path) {
+  const out = [];
+  const re = /tags=([^&]+)/g;
+  let m;
+  while ((m = re.exec(String(path || '')))) out.push(unquotePlus(m[1]));
+  return out;
+}
+function sectionFromPath(path) {
+  const m = String(path || '').match(/^\/(dataset|application|organization|group)\//);
+  return m ? m[1] : 'other';
+}
+function datasetSlugFromResourcePath(path) {
+  const m = String(path || '').match(/^\/dataset\/([^/]+)\/resource\//);
+  return m ? m[1] : null;
+}
+function appSlugFromPath(path) {
+  const m = String(path || '').match(/^\/application\/([^/?]+)/);
+  return m ? m[1] : null;
+}
+function prettifySlug(slug) {
+  if (!slug) return slug;
+  return slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+const SITE_SUFFIX_RE = /\s*-\s*New Mexico Water Data\s*$/i;
+function splitPageTitle(title) {
+  const cleaned = String(title || '').replace(SITE_SUFFIX_RE, '').trim();
+  const parts = cleaned.split(' - ').map(s => s.trim()).filter(Boolean);
+  if (parts.length >= 2) return { name: parts.slice(0, -1).join(' - '), type: parts[parts.length - 1], full: cleaned };
+  return { name: cleaned, type: cleaned, full: cleaned };
+}
+
+/* ============================================================
+   AGGREGATION HELPERS (used by Overview / Search / Engagement tabs
+   and reused for Annual rollups)
+   ============================================================ */
+function getReport(quarterRecord, reportId) {
+  return quarterRecord && quarterRecord.reports ? (quarterRecord.reports[reportId] || null) : null;
+}
+function sortedRows(report, limit) {
+  if (!report) return [];
+  const rows = report.rows.slice().sort((a, b) => displayValue(b.metrics) - displayValue(a.metrics));
+  return limit ? rows.slice(0, limit) : rows;
+}
+function pathDimValue(row) {
+  return row.dims['Page path + query string'] !== undefined ? row.dims['Page path + query string'] : Object.values(row.dims)[0];
+}
+function aggregateBy(rows, keyFn, labelFn) {
+  const map = new Map();
+  for (const row of rows) {
+    const key = keyFn(row);
+    if (key == null) continue;
+    if (!map.has(key)) map.set(key, { key, label: labelFn ? labelFn(row, key) : key, metrics: {}, count: 0 });
+    const entry = map.get(key);
+    entry.count++;
+    for (const mk in row.metrics) entry.metrics[mk] = (entry.metrics[mk] || 0) + row.metrics[mk];
+  }
+  return [...map.values()].sort((a, b) => displayValue(b.metrics) - displayValue(a.metrics));
+}
+function aggregateTagsFromReport(report) {
+  if (!report) return [];
+  const flat = [];
+  for (const row of report.rows) {
+    const path = pathDimValue(row);
+    const tags = extractTags(path);
+    if (!tags.length) continue;
+    for (const t of tags) flat.push({ dims: { tag: t, section: sectionFromPath(path) }, metrics: row.metrics });
+  }
+  return aggregateBy(flat, r => r.dims.tag.toLowerCase(), r => r.dims.tag);
+}
+function aggregateResourcesByDataset(report) {
+  if (!report) return [];
+  const flat = [];
+  for (const row of report.rows) {
+    const path = pathDimValue(row);
+    const slug = datasetSlugFromResourcePath(path);
+    if (!slug) continue;
+    flat.push({ dims: { slug }, metrics: row.metrics });
+  }
+  return aggregateBy(flat, r => r.dims.slug, r => prettifySlug(r.dims.slug));
+}
+function aggregateAppsFromReport(report) {
+  if (!report) return [];
+  const flat = [];
+  for (const row of report.rows) {
+    const path = pathDimValue(row);
+    const slug = appSlugFromPath(path);
+    if (!slug) continue;
+    flat.push({ dims: { slug }, metrics: row.metrics });
+  }
+  return aggregateBy(flat, r => r.dims.slug, r => prettifySlug(r.dims.slug));
+}
+function aggregateOrgsFromReport(report) {
+  if (!report) return [];
+  const flat = [];
+  for (const row of report.rows) {
+    const path = pathDimValue(row);
+    const org = extractParam(path, 'organization');
+    if (!org) continue;
+    flat.push({ dims: { org }, metrics: row.metrics });
+  }
+  return aggregateBy(flat, r => r.dims.org, r => prettifySlug(r.dims.org));
+}
+function aggregateFormatsFromReport(report) {
+  if (!report) return [];
+  const flat = [];
+  for (const row of report.rows) {
+    const path = pathDimValue(row);
+    const fmt = extractParam(path, 'res_format');
+    if (!fmt) continue;
+    flat.push({ dims: { fmt }, metrics: row.metrics });
+  }
+  return aggregateBy(flat, r => r.dims.fmt, r => r.dims.fmt);
+}
+function aggregatePageTypes(report) {
+  if (!report) return [];
+  const flat = report.rows.map(row => {
+    const titleKey = Object.keys(row.dims).find(k => /page title/i.test(k));
+    const split = splitPageTitle(row.dims[titleKey]);
+    return { dims: { type: split.type }, metrics: row.metrics };
+  });
+  return aggregateBy(flat, r => r.dims.type, r => r.dims.type);
+}
+function grandTotalSum(metrics) { return displayValue(metrics); }
+
+/* ============================================================
+   CITY COORDINATES — a curated lookup so "where visitors are"
+   can be mapped without calling out to a geocoding service.
+   Keyed by lowercased city name. New Mexico towns take priority
+   over same-named US cities elsewhere.
+   ============================================================ */
+const NM_CITY_COORDS = {
+  'albuquerque': [35.0844, -106.6504], 'santa fe': [35.6870, -105.9378], 'las cruces': [32.3199, -106.7637],
+  'rio rancho': [35.2328, -106.6630], 'roswell': [33.3943, -104.5230], 'farmington': [36.7281, -108.2187],
+  'clovis': [34.4048, -103.2052], 'hobbs': [32.7026, -103.1360], 'alamogordo': [32.8995, -105.9603],
+  'carlsbad': [32.4207, -104.2288], 'gallup': [35.5281, -108.7426], 'deming': [32.2687, -107.7586],
+  'los lunas': [34.8062, -106.7334], 'sunland park': [31.7929, -106.5747], 'las vegas': [35.5939, -105.2239],
+  'portales': [34.1867, -103.3344], 'los alamos': [35.8884, -106.3033], 'belen': [34.6628, -106.7737],
+  'espanola': [35.9911, -106.0806], 'española': [35.9911, -106.0806], 'bernalillo': [35.3145, -106.5501],
+  'socorro': [34.0584, -106.8914], 'grants': [35.1473, -107.8514], 'silver city': [32.7701, -108.2803],
+  'truth or consequences': [33.1284, -107.2528], 'ruidoso': [33.3317, -105.6739], 'taos': [36.4072, -105.5734],
+  'tucumcari': [35.1717, -103.7250], 'raton': [36.9034, -104.4392], 'artesia': [32.8429, -104.4011],
+  'lovington': [32.9440, -103.3494], 'eunice': [32.4390, -103.1633], 'aztec': [36.8225, -108.0000],
+  'bloomfield': [36.7031, -107.9836], 'kirtland': [36.7328, -108.3547], 'chama': [36.9028, -106.5766],
+  'cloudcroft': [32.9581, -105.7469], 'mesilla': [32.2717, -106.8003], 'anthony': [32.0092, -106.6006],
+  'edgewood': [35.0623, -106.1949], 'corrales': [35.2385, -106.6067], 'placitas': [35.3081, -106.4569],
+  'angel fire': [36.3853, -105.2872], 'red river': [36.7059, -105.4053], 'moriarty': [34.9856, -106.0489],
+  'estancia': [34.7614, -106.0625], 'mountainair': [34.5192, -106.2417], 'magdalena': [34.1189, -107.2453],
+  'reserve': [33.7050, -108.7573], 'quemado': [34.3364, -108.4995], 'tularosa': [33.0801, -106.0192],
+  'mescalero': [33.1526, -105.7842], 'capitan': [33.5326, -105.5814], 'lincoln': [33.4923, -105.3592],
+  'carrizozo': [33.6420, -105.8794], 'corona': [34.2489, -105.6072], 'vaughn': [34.5989, -105.2036],
+  'fort sumner': [34.4676, -104.2444], 'santa rosa': [34.9384, -104.6813], 'cuba': [36.0159, -106.9550],
+  'jemez springs': [35.7742, -106.6864], 'zuni': [35.0714, -108.8514], 'ramah': [35.1414, -108.1670],
+  'milan': [35.1811, -107.8955], 'bosque farms': [34.8695, -106.7203], 'peralta': [34.8342, -106.6970],
+  'tijeras': [35.0806, -106.3944], 'cedar crest': [35.1145, -106.3706], 'sandia park': [35.1706, -106.3773],
+  'santa teresa': [31.8265, -106.6631], 'chaparral': [32.0387, -106.4067], 'elephant butte': [33.1554, -107.1888],
+  'hatch': [32.6706, -107.1517], 'columbus': [31.8267, -107.6423], 'lordsburg': [32.3495, -108.7112],
+  'cimarron': [36.5103, -104.9166], 'springer': [36.3667, -104.5980], 'mora': [35.9614, -105.3277],
+  'wagon mound': [36.0114, -104.7108], 'questa': [36.7053, -105.5975], 'dulce': [36.9364, -107.0006],
+  'shiprock': [36.7856, -108.6870], 'tohatchi': [35.8737, -108.7167], 'crownpoint': [35.6767, -108.1428],
+  'thoreau': [35.4009, -108.2261],
+};
+const US_CITY_COORDS = {
+  'new york': [40.7128, -74.0060], 'los angeles': [34.0522, -118.2437], 'chicago': [41.8781, -87.6298],
+  'houston': [29.7604, -95.3698], 'phoenix': [33.4484, -112.0740], 'philadelphia': [39.9526, -75.1652],
+  'san antonio': [29.4241, -98.4936], 'san diego': [32.7157, -117.1611], 'dallas': [32.7767, -96.7970],
+  'austin': [30.2672, -97.7431], 'san jose': [37.3382, -121.8863], 'fort worth': [32.7555, -97.3308],
+  'jacksonville': [30.3322, -81.6557], 'columbus': [39.9612, -82.9988], 'charlotte': [35.2271, -80.8431],
+  'san francisco': [37.7749, -122.4194], 'indianapolis': [39.7684, -86.1581], 'seattle': [47.6062, -122.3321],
+  'denver': [39.7392, -104.9903], 'washington': [38.9072, -77.0369], 'boston': [42.3601, -71.0589],
+  'nashville': [36.1627, -86.7816], 'detroit': [42.3314, -83.0458], 'oklahoma city': [35.4676, -97.5164],
+  'portland': [45.5152, -122.6784], 'las vegas': [36.1699, -115.1398], 'memphis': [35.1495, -90.0490],
+  'louisville': [38.2527, -85.7585], 'baltimore': [39.2904, -76.6122], 'milwaukee': [43.0389, -87.9065],
+  'tucson': [32.2226, -110.9747], 'fresno': [36.7378, -119.7871], 'sacramento': [38.5816, -121.4944],
+  'kansas city': [39.0997, -94.5786], 'mesa': [33.4152, -111.8315], 'atlanta': [33.7490, -84.3880],
+  'omaha': [41.2565, -95.9345], 'colorado springs': [38.8339, -104.8214], 'raleigh': [35.7796, -78.6382],
+  'miami': [25.7617, -80.1918], 'long beach': [33.7701, -118.1937], 'virginia beach': [36.8529, -75.9780],
+  'oakland': [37.8044, -122.2712], 'minneapolis': [44.9778, -93.2650], 'tulsa': [36.1540, -95.9928],
+  'tampa': [27.9506, -82.4572], 'arlington': [32.7357, -97.1081], 'new orleans': [29.9511, -90.0715],
+  'wichita': [37.6872, -97.3301], 'cleveland': [41.4993, -81.6944], 'bakersfield': [35.3733, -119.0187],
+  'aurora': [39.7294, -104.8319], 'anaheim': [33.8366, -117.9143], 'honolulu': [21.3069, -157.8583],
+  'santa ana': [33.7455, -117.8677], 'riverside': [33.9806, -117.3755], 'corpus christi': [27.8006, -97.3964],
+  'lexington': [38.0406, -84.5037], 'stockton': [37.9577, -121.2908], 'st. louis': [38.6270, -90.1994],
+  'saint louis': [38.6270, -90.1994], 'saint paul': [44.9537, -93.0900], 'cincinnati': [39.1031, -84.5120],
+  'pittsburgh': [40.4406, -79.9959], 'greensboro': [36.0726, -79.7920], 'anchorage': [61.2181, -149.9003],
+  'plano': [33.0198, -96.6989], 'lincoln': [40.8136, -96.7026], 'orlando': [28.5383, -81.3792],
+  'irvine': [33.6846, -117.8265], 'newark': [40.7357, -74.1724], 'durham': [35.9940, -78.8986],
+  'chula vista': [32.6401, -117.0842], 'toledo': [41.6528, -83.5379], 'fort wayne': [41.0793, -85.1394],
+  'st. petersburg': [27.7676, -82.6403], 'laredo': [27.5306, -99.4803], 'jersey city': [40.7178, -74.0431],
+  'chandler': [33.3062, -111.8413], 'madison': [43.0731, -89.4012], 'lubbock': [33.5779, -101.8552],
+  'buffalo': [42.8864, -78.8784], 'scottsdale': [33.4942, -111.9261], 'reno': [39.5296, -119.8138],
+  'glendale': [33.5387, -112.1860], 'gilbert': [33.3528, -111.7890], 'winston-salem': [36.0999, -80.2442],
+  'norfolk': [36.8508, -76.2859], 'chesapeake': [36.7682, -76.2875], 'garland': [32.9126, -96.6389],
+  'irving': [32.8140, -96.9489], 'hialeah': [25.8576, -80.2781], 'fremont': [37.5485, -121.9886],
+  'boise': [43.6150, -116.2023], 'richmond': [37.5407, -77.4360], 'baton rouge': [30.4515, -91.1871],
+  'spokane': [47.6588, -117.4260], 'des moines': [41.6005, -93.6091], 'tacoma': [47.2529, -122.4443],
+  'san bernardino': [34.1083, -117.2898], 'modesto': [37.6391, -120.9969], 'fontana': [34.0922, -117.4350],
+  'frisco': [33.1507, -96.8236], 'rochester': [43.1566, -77.6088], 'yonkers': [40.9312, -73.8988],
+  'fayetteville': [35.0527, -78.8784], 'worcester': [42.2626, -71.8023], 'salt lake city': [40.7608, -111.8910],
+  'huntsville': [34.7304, -86.5861], 'grand rapids': [42.9634, -85.6681], 'amarillo': [35.2220, -101.8313],
+  'knoxville': [35.9606, -83.9207], 'providence': [41.8240, -71.4128], 'brownsville': [25.9018, -97.4975],
+  'overland park': [38.9822, -94.6708], 'tempe': [33.4255, -111.9400], 'el paso': [31.7619, -106.4850],
+  'denton': [33.2148, -97.1331], 'flagstaff': [35.1983, -111.6513], 'pueblo': [38.2544, -104.6091],
+  'fort collins': [40.5853, -105.0844], 'boulder': [40.0150, -105.2705], 'lakewood': [39.7047, -105.0814],
+};
+function coordsForCity(city, region) {
+  const c = String(city || '').trim().toLowerCase();
+  if (!c || c === '(not set)' || c === '(unknown)') return null;
+  if (NM_CITY_COORDS[c]) return NM_CITY_COORDS[c];
+  if (US_CITY_COORDS[c]) return US_CITY_COORDS[c];
+  return null;
+}
+
+/* ============================================================
+   MAPS (Leaflet) — bounding-box searches and visitor-city engagement
+   All basemaps below are free tile sources that don't require an API key.
+   ============================================================ */
+const BASEMAPS = {
+  light: {
+    label: 'Light', subdomains: '',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Esri, HERE, Garmin, FAO, NOAA, USGS',
+  },
+  streets: {
+    label: 'Streets', subdomains: 'abc',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+  },
+  dark: {
+    label: 'Dark', subdomains: '',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Esri, HERE, Garmin, FAO, NOAA, USGS',
+  },
+  imagery: {
+    label: 'Imagery', subdomains: '',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Esri, Maxar, Earthstar Geographics',
+  },
+};
+function tileLayerFor(id) {
+  const b = BASEMAPS[id] || BASEMAPS.light;
+  const opts = { attribution: b.attribution, maxZoom: 19 };
+  if (b.subdomains) opts.subdomains = b.subdomains;
+  return L.tileLayer(b.url, opts);
+}
+function basemapPickerHtml() {
+  return `<div id="basemap-picker" style="display:flex; gap:4px;">
+    ${Object.entries(BASEMAPS).map(([id, b]) => `<button data-basemap="${id}" class="${(APP.basemapId || 'light') === id ? 'active' : ''}">${b.label}</button>`).join('')}
+  </div>`;
+}
+let OV_BBOX_MAP = null, OV_BBOX_TILE = null, OV_CITY_MAP = null, OV_CITY_TILE = null;
+function setBasemap(id) {
+  APP.basemapId = id;
+  document.querySelectorAll('#basemap-picker button').forEach(b => b.classList.toggle('active', b.dataset.basemap === id));
+  if (OV_BBOX_MAP) { if (OV_BBOX_TILE) OV_BBOX_MAP.removeLayer(OV_BBOX_TILE); OV_BBOX_TILE = tileLayerFor(id).addTo(OV_BBOX_MAP); }
+  if (OV_CITY_MAP) { if (OV_CITY_TILE) OV_CITY_MAP.removeLayer(OV_CITY_TILE); OV_CITY_TILE = tileLayerFor(id).addTo(OV_CITY_MAP); }
+}
+function wireBasemapPicker() {
+  document.querySelectorAll('#basemap-picker button').forEach(btn => {
+    btn.addEventListener('click', () => setBasemap(btn.dataset.basemap));
+  });
+}
+function renderBboxMap(containerId, report) {
+  const container = document.getElementById(containerId);
+  if (OV_BBOX_MAP) { OV_BBOX_MAP.remove(); OV_BBOX_MAP = null; OV_BBOX_TILE = null; }
+  if (!report) { container.innerHTML = `<div style="padding:16px; font-size:12px; color:var(--paper-faint);">${missingReportNote('bboxSearches')}</div>`; return; }
+
+  const boxes = [];
+  for (const row of report.rows) {
+    const path = pathDimValue(row);
+    const raw = extractParam(path, 'ext_bbox');
+    const val = displayValue(row.metrics);
+    if (!raw || val <= 0) continue;
+    const parts = raw.split(',').map(Number);
+    if (parts.length !== 4 || parts.some(isNaN)) continue;
+    const [minLon, minLat, maxLon, maxLat] = parts;
+    boxes.push({ minLon, minLat, maxLon, maxLat, val, tags: extractTags(path), org: extractParam(path, 'organization'), q: extractParam(path, 'q') });
+  }
+  if (!boxes.length) {
+    container.innerHTML = `<div style="padding:16px; font-size:12px; color:var(--paper-faint);">No map-search activity for ${populationLabel()} this period.</div>`;
+    return;
+  }
+  container.innerHTML = '';
+  const map = L.map(container, { scrollWheelZoom: false }).setView([34.4, -106.1], 6);
+  OV_BBOX_TILE = tileLayerFor(APP.basemapId || 'light').addTo(map);
+  const maxVal = Math.max(...boxes.map(b => b.val));
+  for (const b of boxes) {
+    const fillOpacity = 0.10 + 0.38 * (b.val / maxVal);
+    const rect = L.rectangle([[b.minLat, b.minLon], [b.maxLat, b.maxLon]], {
+      color: '#C4842A', weight: 1.5, fillColor: '#E8A33D', fillOpacity,
+    }).addTo(map);
+    const bits = [`${fmtNum(b.val)} search${b.val === 1 ? '' : 'es'}`];
+    if (b.tags.length) bits.push('tags: ' + b.tags.join(', '));
+    if (b.org) bits.push('org: ' + prettifySlug(b.org));
+    if (b.q) bits.push('query: "' + b.q + '"');
+    rect.bindTooltip(bits.join(' · '));
+  }
+  OV_BBOX_MAP = map;
+}
+function renderCityMap(containerId, report) {
+  const container = document.getElementById(containerId);
+  if (OV_CITY_MAP) { OV_CITY_MAP.remove(); OV_CITY_MAP = null; OV_CITY_TILE = null; }
+  if (!report) { container.innerHTML = `<div style="padding:16px; font-size:12px; color:var(--paper-faint);">${missingReportNote('engagementByCity')}</div>`; return; }
+
+  const points = [];
+  let matchedTotal = 0, unmatchedTotal = 0, unmatchedCount = 0;
+  for (const row of report.rows) {
+    const val = displayValue(row.metrics);
+    if (val <= 0) continue;
+    const coords = coordsForCity(row.dims.City, row.dims.Region);
+    if (coords) { points.push({ coords, val, city: row.dims.City, region: row.dims.Region }); matchedTotal += val; }
+    else { unmatchedTotal += val; unmatchedCount++; }
+  }
+  container.innerHTML = '';
+  const isNm = (APP.populationMode || 'nm') === 'nm';
+  const map = L.map(container, { scrollWheelZoom: false }).setView(isNm ? [34.6, -106.3] : [39.5, -98.0], isNm ? 6 : 4);
+  OV_CITY_TILE = tileLayerFor(APP.basemapId || 'light').addTo(map);
+  if (points.length) {
+    const maxVal = Math.max(...points.map(p => p.val));
+    for (const p of points) {
+      const radius = Math.max(4, Math.sqrt(p.val / maxVal) * 22);
+      L.circleMarker(p.coords, { radius, color: '#2E8677', weight: 1.5, fillColor: '#5FC2B0', fillOpacity: 0.6 })
+        .bindTooltip(`${p.city}, ${p.region}: ${fmtNum(p.val)} events`)
+        .addTo(map);
+    }
+  }
+  const totalPct = (matchedTotal + unmatchedTotal) ? Math.round(100 * matchedTotal / (matchedTotal + unmatchedTotal)) : 0;
+  const note = document.createElement('div');
+  note.style.cssText = 'font-size:10.5px; color:var(--paper-faint); margin-top:6px;';
+  note.textContent = points.length
+    ? `Plotting ${points.length} cities (${totalPct}% of ${populationLabel().toLowerCase()} engagement). ${unmatchedCount} smaller/unlisted cities not shown.`
+    : `No mappable cities found for ${populationLabel()} this period.`;
+  container.insertAdjacentElement('afterend', note);
+  OV_CITY_MAP = map;
+}
+
+/* ============================================================
+   SMALL UI BUILDING BLOCKS
+   ============================================================ */
+function gauge(n, label, cls) {
+  return `<div class="gauge ${cls || ''}"><div class="n">${fmtNum(n)}</div><div class="l">${label}</div></div>`;
+}
+function barRowHtml(label, sub, value, max, opts) {
+  opts = opts || {};
+  const pct = max ? Math.round(100 * value / max) : 0;
+  return `<div class="bar-row${opts.clickable ? ' clickable' : ''}" ${opts.dataAttr || ''}>
+    <div class="lbl"><span class="t">${escapeHtml(label)}</span><span class="v">${fmtNum(value)}</span></div>
+    <div class="bar-track"><div class="bar-fill ${opts.cls || ''}" style="width:${pct}%;"></div></div>
+    ${sub ? `<div class="sub">${sub}</div>` : ''}
+  </div>`;
+}
+function renderAggList(entries, limit, cls) {
+  const top = entries.slice(0, limit || 15);
+  const max = top.length ? displayValue(top[0].metrics) : 1;
+  if (!top.length) return `<p style="font-size:12px; color:var(--paper-faint);">No data for this report in this quarter.</p>`;
+  return top.map(e => barRowHtml(e.label, `${e.count} row${e.count === 1 ? '' : 's'} combined`, displayValue(e.metrics), max, { cls })).join('');
+}
+function missingReportNote(reportId) {
+  const entry = Object.values(REPORT_REGISTRY_RAW).find(r => r.id === reportId);
+  return `<p class="note">"${entry ? entry.label : reportId}" wasn't included in this quarter's upload, so this section is empty.</p>`;
+}
+
+/* ============================================================
+   TAB: OVERVIEW
+   ============================================================ */
+function renderOverviewTab(el, q) {
+  const tags = getReport(q, 'tags');
+  const resources = getReport(q, 'resources');
+  const apps = getReport(q, 'apps');
+  const fileDownloads = getReport(q, 'fileDownloads');
+  const downloads = getReport(q, 'downloads');
+  const searchTerms = getReport(q, 'searchTerms');
+  const engagementByPage = getReport(q, 'engagementByPage');
+  const errors = getReport(q, 'errors');
+  const bbox = getReport(q, 'bboxSearches');
+  const engagementByCity = getReport(q, 'engagementByCity');
+
+  const downloadsTotal = fileDownloads ? grandTotalSum(fileDownloads.grandTotal) : (downloads ? grandTotalSum(downloads.grandTotal) : 0);
+  const searchTermRows = searchTerms ? searchTerms.rows.filter(r => (r.dims['Search term'] || '').trim() !== '' && displayValue(r.metrics) > 0) : [];
+
+  el.innerHTML = `
+    <p style="font-size:11.5px; color:var(--paper-faint); margin:-8px 0 16px;">Showing figures for <b style="color:var(--brass);">${populationLabel()}</b> — switch with the toggle above.</p>
+    <div class="gauge-grid">
+      ${gauge(engagementByPage ? grandTotalSum(engagementByPage.grandTotal) : 0, 'total engagement events', 'teal')}
+      ${gauge(tags ? grandTotalSum(tags.grandTotal) : 0, 'tag-filter search events', 'amber')}
+      ${gauge(resources ? grandTotalSum(resources.grandTotal) : 0, 'dataset resource opens', 'amber')}
+      ${gauge(downloadsTotal, 'file downloads', 'teal')}
+      ${gauge(searchTermRows.length, 'distinct free-text search terms', 'teal')}
+      ${gauge(errors ? grandTotalSum(errors.grandTotal) : 0, '404/403 page errors', 'rust')}
+    </div>
+
+    <div class="section" style="display:flex; align-items:center; justify-content:space-between; border-bottom:none; margin-bottom:6px; padding-bottom:0;">
+      <h3 style="border-bottom:none; margin-bottom:0; padding-bottom:0;">Maps</h3>
+      ${basemapPickerHtml()}
+    </div>
+    <div class="two-col">
+      <div class="section">
+        <h3>Where map searches happen <span class="hint">bounding-box searches on the catalog map</span></h3>
+        <div id="ov-bbox-map" class="map-holder"></div>
+      </div>
+      <div class="section">
+        <h3>Where visitors are <span class="hint">engagement by city</span></h3>
+        <div id="ov-city-map" class="map-holder"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Most-searched tags <span class="hint">click to see all quarters this tag appears in</span></h3>
+      <div id="ov-tags"></div>
+    </div>
+    <div class="section">
+      <h3>Most-opened datasets <span class="hint">Popular Resources, rolled up to the dataset level</span></h3>
+      <div id="ov-datasets"></div>
+    </div>
+    <div class="two-col">
+      <div class="section">
+        <h3>Most-used applications</h3>
+        <div id="ov-apps"></div>
+      </div>
+      <div class="section">
+        <h3>Top free-text search terms</h3>
+        <div id="ov-terms"></div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('ov-tags').innerHTML = tags ? renderAggList(aggregateTagsFromReport(tags), 15) : missingReportNote('tags');
+  document.getElementById('ov-datasets').innerHTML = resources ? renderAggList(aggregateResourcesByDataset(resources), 15, 'teal') : missingReportNote('resources');
+  document.getElementById('ov-apps').innerHTML = apps ? renderAggList(aggregateAppsFromReport(apps), 10, 'teal') : missingReportNote('apps');
+  document.getElementById('ov-terms').innerHTML = searchTerms
+    ? (searchTermRows.length
+        ? searchTermRows.slice().sort((a, b) => displayValue(b.metrics) - displayValue(a.metrics)).slice(0, 10)
+            .map(r => barRowHtml(r.dims['Search term'], null, displayValue(r.metrics), displayValue(searchTermRows[0].metrics)))
+            .join('')
+        : `<p style="font-size:12px; color:var(--paper-faint);">No non-blank search terms recorded for ${populationLabel()}.</p>`)
+    : missingReportNote('searchTerms');
+
+  renderBboxMap('ov-bbox-map', bbox);
+  renderCityMap('ov-city-map', engagementByCity);
+  wireBasemapPicker();
+}
+
+/* ============================================================
+   TAB: SEARCH & DISCOVERY
+   ============================================================ */
+function renderSearchTab(el, q) {
+  const orgs = getReport(q, 'orgs');
+  const formats = getReport(q, 'formats');
+  const searchTermsByPage = getReport(q, 'searchTermsByPage');
+  const searchTermsByState = getReport(q, 'searchTermsByState');
+  const tags = getReport(q, 'tags');
+
+  const sectionCounts = {};
+  if (tags) {
+    for (const row of tags.rows) {
+      const sec = sectionFromPath(pathDimValue(row));
+      sectionCounts[sec] = (sectionCounts[sec] || 0) + displayValue(row.metrics);
+    }
+  }
+  const sectionEntries = Object.entries(sectionCounts).sort((a, b) => b[1] - a[1]);
+  const maxSection = sectionEntries.length ? sectionEntries[0][1] : 1;
+
+  el.innerHTML = `
+    <div class="section">
+      <h3>Where tag-filtering happens</h3>
+      <div id="sr-sections"></div>
+    </div>
+    <div class="two-col">
+      <div class="section">
+        <h3>Top organizations filtered on</h3>
+        <div id="sr-orgs"></div>
+      </div>
+      <div class="section">
+        <h3>Top formats filtered on</h3>
+        <div id="sr-formats"></div>
+      </div>
+    </div>
+    <div class="section">
+      <h3>Search terms by page type <span class="hint">where on the site people typed a query</span></h3>
+      <div id="sr-termsbypage"></div>
+    </div>
+  `;
+  document.getElementById('sr-sections').innerHTML = sectionEntries.length
+    ? sectionEntries.map(([sec, n]) => barRowHtml(sec, null, n, maxSection)).join('')
+    : missingReportNote('tags');
+  document.getElementById('sr-orgs').innerHTML = orgs ? renderAggList(aggregateOrgsFromReport(orgs), 12) : missingReportNote('orgs');
+  document.getElementById('sr-formats').innerHTML = formats ? renderAggList(aggregateFormatsFromReport(formats), 12, 'teal') : missingReportNote('formats');
+  if (searchTermsByPage) {
+    const byType = aggregateBy(searchTermsByPage.rows.map(r => {
+      const titleKey = Object.keys(r.dims).find(k => /page title/i.test(k));
+      return { dims: { type: splitPageTitle(r.dims[titleKey]).type }, metrics: r.metrics };
+    }), r => r.dims.type, r => r.dims.type);
+    document.getElementById('sr-termsbypage').innerHTML = renderAggList(byType, 10, 'teal');
+  } else {
+    document.getElementById('sr-termsbypage').innerHTML = missingReportNote('searchTermsByPage');
+  }
+}
+
+/* ============================================================
+   TAB: ENGAGEMENT & DOWNLOADS
+   ============================================================ */
+function renderEngagementTab(el, q) {
+  const engagementByPage = getReport(q, 'engagementByPage');
+  const engagementByCity = getReport(q, 'engagementByCity');
+  const engagementByNew = getReport(q, 'engagementByNew');
+  const scroll90 = getReport(q, 'scroll90');
+  const fileDownloads = getReport(q, 'fileDownloads');
+  const downloads = getReport(q, 'downloads');
+  const fileNameDownload = getReport(q, 'fileNameDownload');
+
+  el.innerHTML = `
+    <div class="two-col">
+      <div class="section">
+        <h3>Engagement by page type</h3>
+        <div id="en-pagetype"></div>
+      </div>
+      <div class="section">
+        <h3>New vs. established visitors</h3>
+        <div id="en-new"></div>
+      </div>
+    </div>
+    <div class="section">
+      <h3>Top cities</h3>
+      <div id="en-cities"></div>
+    </div>
+    <div class="section">
+      <h3>90% scroll depth, by page type <span class="hint">how much of a page people actually read</span></h3>
+      <div id="en-scroll"></div>
+    </div>
+    <div class="section">
+      <h3>Most downloaded resources</h3>
+      <div id="en-downloads"></div>
+    </div>
+  `;
+  document.getElementById('en-pagetype').innerHTML = engagementByPage ? renderAggList(aggregatePageTypes(engagementByPage), 10) : missingReportNote('engagementByPage');
+  if (engagementByNew) {
+    const rows = engagementByNew.rows.slice().sort((a, b) => displayValue(b.metrics) - displayValue(a.metrics));
+    const max = rows.length ? displayValue(rows[0].metrics) : 1;
+    document.getElementById('en-new').innerHTML = rows.map(r => {
+      const k = Object.keys(r.dims)[0];
+      return barRowHtml(r.dims[k] || '(not set)', null, displayValue(r.metrics), max, { cls: 'teal' });
+    }).join('');
+  } else {
+    document.getElementById('en-new').innerHTML = missingReportNote('engagementByNew');
+  }
+  if (engagementByCity) {
+    const rows = engagementByCity.rows.slice().sort((a, b) => displayValue(b.metrics) - displayValue(a.metrics)).slice(0, 15);
+    const max = rows.length ? displayValue(rows[0].metrics) : 1;
+    document.getElementById('en-cities').innerHTML = rows.map(r => barRowHtml(`${r.dims.City || '(unknown)'}`, r.dims.Region || '', displayValue(r.metrics), max)).join('');
+  } else {
+    document.getElementById('en-cities').innerHTML = missingReportNote('engagementByCity');
+  }
+  document.getElementById('en-scroll').innerHTML = scroll90 ? renderAggList(aggregatePageTypes(scroll90), 10, 'teal') : missingReportNote('scroll90');
+
+  const dlReport = fileDownloads || downloads;
+  if (dlReport) {
+    const rows = dlReport.rows.slice().sort((a, b) => displayValue(b.metrics) - displayValue(a.metrics)).slice(0, 15);
+    const max = rows.length ? displayValue(rows[0].metrics) : 1;
+    document.getElementById('en-downloads').innerHTML = rows.map(r => {
+      const titleKey = Object.keys(r.dims).find(k => /page title/i.test(k));
+      const split = splitPageTitle(r.dims[titleKey]);
+      return barRowHtml(split.name, split.type !== split.name ? split.type : null, displayValue(r.metrics), max, { cls: 'teal' });
+    }).join('') + (fileNameDownload ? `<p class="note teal">File-level detail (paths, not titles) is available in Raw data → File Name Download.</p>` : '');
+  } else {
+    document.getElementById('en-downloads').innerHTML = missingReportNote('fileDownloads');
+  }
+}
+
+/* ============================================================
+   TAB: INTERACTIONS & QUALITY
+   ============================================================ */
+function renderInteractionsTab(el, q) {
+  const clicksByPage = getReport(q, 'clicksByPage');
+  const eventClick3step = getReport(q, 'eventClick3step');
+  const threeStepDownload = getReport(q, 'threeStepDownload');
+  const errors = getReport(q, 'errors');
+
+  el.innerHTML = `
+    <div class="section">
+      <h3>Clicks on embedded apps / maps, by page</h3>
+      <div id="in-clicks"></div>
+    </div>
+    <div class="two-col">
+      <div class="section">
+        <h3>Where clicks on external apps come from</h3>
+        <div id="in-referrers"></div>
+      </div>
+      <div class="section">
+        <h3>Where download clicks come from</h3>
+        <div id="in-dlreferrers"></div>
+      </div>
+    </div>
+    <div class="section">
+      <h3>Site errors (404 / 403) <span class="hint">broken links worth fixing</span></h3>
+      <div id="in-errors"></div>
+    </div>
+  `;
+  document.getElementById('in-clicks').innerHTML = clicksByPage
+    ? renderAggList(aggregateBy(clicksByPage.rows.map(r => {
+        const titleKey = Object.keys(r.dims).find(k => /page title/i.test(k));
+        return { dims: { name: splitPageTitle(r.dims[titleKey]).name }, metrics: r.metrics };
+      }), r => r.dims.name, r => r.dims.name), 12)
+    : missingReportNote('clicksByPage');
+
+  document.getElementById('in-referrers').innerHTML = eventClick3step
+    ? renderAggList(aggregateBy(eventClick3step.rows, r => r.dims['Page referrer'], r => r.dims['Page referrer'] || '(direct / unknown)'), 10, 'teal')
+    : missingReportNote('eventClick3step');
+
+  document.getElementById('in-dlreferrers').innerHTML = threeStepDownload
+    ? renderAggList(aggregateBy(threeStepDownload.rows, r => r.dims['Page referrer'], r => r.dims['Page referrer'] || '(direct / unknown)'), 10, 'teal')
+    : missingReportNote('threeStepDownload');
+
+  if (errors) {
+    const rows = errors.rows.slice().sort((a, b) => displayValue(b.metrics) - displayValue(a.metrics)).slice(0, 20);
+    const max = rows.length ? displayValue(rows[0].metrics) : 1;
+    document.getElementById('in-errors').innerHTML = (rows.length
+      ? rows.map(r => {
+          const pathKey = Object.keys(r.dims).find(k => /page path/i.test(k));
+          const titleKey = Object.keys(r.dims).find(k => /page title/i.test(k));
+          return barRowHtml(r.dims[pathKey], escapeHtml(r.dims[titleKey] || ''), displayValue(r.metrics), max, { cls: 'rust' });
+        }).join('')
+      : `<p style="font-size:12px; color:var(--paper-faint);">No errors recorded — good sign.</p>`)
+      + `<p class="note rust">${rows.length} broken paths accounted for ${fmtNum(grandTotalSum(errors.grandTotal))} error events this period. Worth a quarterly link check on the top few.</p>`;
+  } else {
+    document.getElementById('in-errors').innerHTML = missingReportNote('errors');
+  }
+}
+
+/* ============================================================
+   TAB: RAW DATA (generic sortable tables for every report)
+   ============================================================ */
+function renderRawTab(el, q) {
+  const blocks = REPORT_ORDER.map(id => {
+    const report = getReport(q, id);
+    const entry = Object.values(REPORT_REGISTRY_RAW).find(r => r.id === id);
+    const label = entry ? entry.label : id;
+    if (!report) {
+      return `<details class="report-block"><summary>${escapeHtml(label)} <span class="rowcount">not in this export</span></summary></details>`;
+    }
+    return `<details class="report-block" data-report="${id}">
+      <summary>${escapeHtml(label)} <span class="rowcount">${report.rowCount} rows</span></summary>
+      <div class="body"><div class="table-holder"></div></div>
+    </details>`;
+  }).join('');
+  el.innerHTML = `<div class="section"><h3>All reports in this export</h3>${blocks}</div>`;
+
+  el.querySelectorAll('details.report-block[data-report]').forEach(det => {
+    det.addEventListener('toggle', () => {
+      if (det.open && !det.dataset.rendered) {
+        const id = det.dataset.report;
+        const report = getReport(q, id);
+        renderDataTable(det.querySelector('.table-holder'), report);
+        det.dataset.rendered = '1';
+      }
+    });
+  });
+}
+
+function renderDataTable(container, report) {
+  const cols = [...report.dimCols, ...report.metricCols];
+  let sortCol = report.metricCols[0] || report.dimCols[0];
+  let sortDir = -1;
+  function draw() {
+    const rows = report.rows.slice().sort((a, b) => {
+      const av = report.dimCols.includes(sortCol) ? (a.dims[sortCol] || '') : (a.metrics[sortCol] || 0);
+      const bv = report.dimCols.includes(sortCol) ? (b.dims[sortCol] || '') : (b.metrics[sortCol] || 0);
+      if (typeof av === 'number') return (av - bv) * sortDir;
+      return String(av).localeCompare(String(bv)) * sortDir;
+    }).slice(0, 200);
+    container.innerHTML = `<table class="data-table">
+      <thead><tr>${cols.map(c => `<th data-col="${escapeHtml(c)}">${escapeHtml(c)}${c === sortCol ? (sortDir === 1 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(r => `<tr>${cols.map(c => report.dimCols.includes(c)
+        ? `<td>${escapeHtml(r.dims[c])}</td>`
+        : `<td class="num">${fmtNum(r.metrics[c])}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table>
+    ${report.rowCount > 200 ? `<p class="note" style="margin-top:8px;">Showing top 200 of ${report.rowCount} rows.</p>` : ''}`;
+    container.querySelectorAll('th').forEach(th => th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (col === sortCol) sortDir *= -1; else { sortCol = col; sortDir = -1; }
+      draw();
+    }));
+  }
+  draw();
+}
+
+/* ============================================================
+   RAIL (sidebar) RENDERING
+   ============================================================ */
+function renderRail() {
+  const list = document.getElementById('quarter-list');
+  if (!APP.index.length) {
+    list.innerHTML = `<div id="empty-rail">No quarters logged yet. Click "Log a new quarter" below to add your first GA4 export.</div>`;
+  } else {
+    const sorted = APP.index.slice().sort((a, b) => b.id.localeCompare(a.id));
+    list.innerHTML = sorted.map(q => `
+      <button class="q-item${q.id === APP.selectedQuarterId && APP.view === 'quarter' ? ' active' : ''}" data-qid="${escapeHtml(q.id)}">
+        <div class="id">${escapeHtml(q.id)}</div>
+        <div class="range">${fmtDate(q.periodStart)} – ${fmtDate(q.periodEnd)}</div>
+      </button>
+    `).join('');
+    list.querySelectorAll('.q-item').forEach(btn => {
+      btn.addEventListener('click', () => selectQuarter(btn.dataset.qid));
+    });
+  }
+  const statusEl = document.getElementById('storage-status');
+  if (STORAGE_OK === false) {
+    statusEl.innerHTML = `<span style="color:var(--rust);">⚠ No browser storage here — this session's log lives in memory only. Export it before you close this tab, and import it again next time.</span>`;
+  } else if (STORAGE_OK === true) {
+    statusEl.innerHTML = `This browser remembers your quarters, but export occasionally as a backup.`;
+  } else {
+    statusEl.innerHTML = '';
+  }
+}
+
+async function selectQuarter(id) {
+  APP.view = 'quarter';
+  APP.selectedQuarterId = id;
+  APP.currentQuarter = await loadQuarter(id);
+  renderRail();
+  renderMain();
+}
+
+/* ============================================================
+   MAIN VIEW DISPATCH
+   ============================================================ */
+function renderMain() {
+  if (APP.view === 'annual') { renderAnnualView(); return; }
+  if (!APP.currentQuarter) return;
+  renderQuarterView(APP.currentQuarter);
+}
+
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'search', label: 'Search & Discovery' },
+  { id: 'engagement', label: 'Engagement & Downloads' },
+  { id: 'interactions', label: 'Interactions & Quality' },
+  { id: 'trends', label: 'Trends' },
+  { id: 'raw', label: 'Raw data' },
+];
+
+function renderQuarterView(q) {
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <div id="main-head">
+      <div>
+        <h2>${escapeHtml(q.id)}</h2>
+        <div class="period">${fmtDate(q.periodStart)} – ${fmtDate(q.periodEnd)} · saved ${new Date(q.savedAt).toLocaleDateString()}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        ${popToggleHtml()}
+        <button class="btn btn-secondary" id="download-quarter-btn" style="flex:none; padding:8px 14px;">Download JSON</button>
+        <button class="btn btn-secondary" id="delete-quarter-btn" style="flex:none; padding:8px 14px; color:var(--rust);">Delete quarter</button>
+      </div>
+    </div>
+    <div id="tabs">${TABS.map(t => `<button class="tab-btn${t.id === APP.activeTabId ? ' active' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}</div>
+    <div id="tab-panes">
+      <div class="tab-pane${APP.activeTabId === 'overview' ? ' active' : ''}" id="pane-overview"></div>
+      <div class="tab-pane${APP.activeTabId === 'search' ? ' active' : ''}" id="pane-search"></div>
+      <div class="tab-pane${APP.activeTabId === 'engagement' ? ' active' : ''}" id="pane-engagement"></div>
+      <div class="tab-pane${APP.activeTabId === 'interactions' ? ' active' : ''}" id="pane-interactions"></div>
+      <div class="tab-pane${APP.activeTabId === 'trends' ? ' active' : ''}" id="pane-trends"></div>
+      <div class="tab-pane${APP.activeTabId === 'raw' ? ' active' : ''}" id="pane-raw"></div>
+    </div>
+  `;
+  wirePopToggle();
+  const paneRenderers = {
+    overview: () => renderOverviewTab(document.getElementById('pane-overview'), q),
+    search: () => renderSearchTab(document.getElementById('pane-search'), q),
+    engagement: () => renderEngagementTab(document.getElementById('pane-engagement'), q),
+    interactions: () => renderInteractionsTab(document.getElementById('pane-interactions'), q),
+    trends: () => renderTrendsTab(document.getElementById('pane-trends')),
+    raw: () => renderRawTab(document.getElementById('pane-raw'), q),
+  };
+  main.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      APP.activeTabId = btn.dataset.tab;
+      main.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+      main.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + btn.dataset.tab));
+      // Panes render lazily, only once they're actually visible — this matters for the
+      // Leaflet maps on Overview, which can't size themselves correctly inside a hidden pane.
+      if (!main.dataset['rendered_' + btn.dataset.tab]) {
+        paneRenderers[btn.dataset.tab]();
+        main.dataset['rendered_' + btn.dataset.tab] = '1';
+      }
+    });
+  });
+  // Render only the tab that's actually visible right now; the rest render on first click.
+  paneRenderers[APP.activeTabId]();
+  main.dataset['rendered_' + APP.activeTabId] = '1';
+
+  document.getElementById('download-quarter-btn').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(q, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `nmwdi_usage_${q.id}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+  });
+  document.getElementById('delete-quarter-btn').addEventListener('click', async () => {
+    if (!confirm(`Delete the logged reading for ${q.id}? This can't be undone.`)) return;
+    await deleteQuarter(q.id);
+    APP.currentQuarter = null;
+    APP.selectedQuarterId = null;
+    renderRail();
+    if (APP.index.length) await selectQuarter(APP.index[APP.index.length - 1].id);
+    else resetToSplash();
+  });
+}
+
+function resetToSplash() {
+  document.getElementById('main').innerHTML = `
+    <div id="splash">
+      <div class="icon">📓</div>
+      <h2>No readings logged yet</h2>
+      <p>Upload a quarterly GA4 export (the zip of CSVs, or the individual files) to start the log. Once you have a few quarters in, export the log as a backup file — that's what brings everything back next time you open this tool.</p>
+      <button class="rail-btn" id="splash-upload-btn" style="width:auto; padding:11px 22px;">+ Log a new quarter</button>
+    </div>`;
+  document.getElementById('splash-upload-btn').addEventListener('click', openUploadModal);
+}
+
+/* ============================================================
+   TAB: TRENDS (cross-quarter)
+   ============================================================ */
+const TREND_METRICS = [
+  { key: 'tags', label: 'Tag-filter search events', color: '#E8A33D' },
+  { key: 'resources', label: 'Resource opens', color: '#4FB7A6' },
+  { key: 'apps', label: 'Application opens', color: '#8CA9D9' },
+  { key: 'fileDownloads', label: 'File downloads', color: '#D96C56' },
+  { key: 'engagementByPage', label: 'Total engagement events', color: '#C79FE0' },
+  { key: 'errors', label: '404 / 403 errors', color: '#D96C56' },
+];
+let trendChartInstance = null;
+function renderTrendsTab(el) {
+  const quarters = APP.index.slice().sort((a, b) => a.id.localeCompare(b.id));
+  if (quarters.length < 2) {
+    el.innerHTML = `<div class="section"><h3>Trends</h3><p class="note">Log at least two quarters to see trends over time. You currently have ${quarters.length}.</p></div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="section">
+      <h3>Headline metrics across all logged quarters</h3>
+      <canvas id="trend-canvas" height="110"></canvas>
+    </div>
+    <div class="section">
+      <h3>Track one tag or dataset across quarters</h3>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+        <select id="trend-item-type" style="background:var(--panel-raised); color:var(--paper); border:1px solid var(--panel-line); border-radius:3px; padding:8px 10px; font-family:var(--font-body); font-size:12.5px;">
+          <option value="tags">Tag</option>
+          <option value="resources">Dataset</option>
+          <option value="apps">Application</option>
+        </select>
+        <select id="trend-item-pick" style="flex:1; min-width:200px; background:var(--panel-raised); color:var(--paper); border:1px solid var(--panel-line); border-radius:3px; padding:8px 10px; font-family:var(--font-body); font-size:12.5px;"></select>
+      </div>
+      <canvas id="trend-item-canvas" height="90"></canvas>
+    </div>
+  `;
+
+  const labels = quarters.map(q => q.id);
+  const datasets = TREND_METRICS.map(m => ({
+    label: m.label, borderColor: m.color, backgroundColor: m.color, tension: 0.25, pointRadius: 3,
+    data: quarters.map(q => q.grandTotals && q.grandTotals[m.key] ? grandTotalSum(q.grandTotals[m.key]) : 0),
+  }));
+  if (trendChartInstance) trendChartInstance.destroy();
+  trendChartInstance = new Chart(document.getElementById('trend-canvas'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: chartOptions(),
+  });
+
+  // populate item picker from the currently selected (most recent) quarter's data
+  const typeSel = document.getElementById('trend-item-type');
+  const pickSel = document.getElementById('trend-item-pick');
+  async function refreshPicker() {
+    const latestId = quarters[quarters.length - 1].id;
+    const latestQ = await loadQuarter(latestId);
+    let entries = [];
+    const kind = typeSel.value;
+    if (kind === 'tags') entries = aggregateTagsFromReport(getReport(latestQ, 'tags'));
+    else if (kind === 'resources') entries = aggregateResourcesByDataset(getReport(latestQ, 'resources'));
+    else if (kind === 'apps') entries = aggregateAppsFromReport(getReport(latestQ, 'apps'));
+    pickSel.innerHTML = entries.slice(0, 40).map(e => `<option value="${escapeHtml(e.key)}">${escapeHtml(e.label)}</option>`).join('');
+    if (entries.length) drawItemTrend(kind, entries[0].key);
+  }
+  typeSel.addEventListener('change', refreshPicker);
+  pickSel.addEventListener('change', () => drawItemTrend(typeSel.value, pickSel.value));
+
+  let itemChartInstance = null;
+  async function drawItemTrend(kind, key) {
+    const data = [];
+    for (const qi of quarters) {
+      const full = await loadQuarter(qi.id);
+      let entries = [];
+      if (kind === 'tags') entries = aggregateTagsFromReport(getReport(full, 'tags'));
+      else if (kind === 'resources') entries = aggregateResourcesByDataset(getReport(full, 'resources'));
+      else if (kind === 'apps') entries = aggregateAppsFromReport(getReport(full, 'apps'));
+      const match = entries.find(e => e.key === key);
+      data.push(match ? displayValue(match.metrics) : 0);
+    }
+    if (itemChartInstance) itemChartInstance.destroy();
+    itemChartInstance = new Chart(document.getElementById('trend-item-canvas'), {
+      type: 'line',
+      data: { labels, datasets: [{ label: pickSel.options[pickSel.selectedIndex] ? pickSel.options[pickSel.selectedIndex].text : key, data, borderColor: '#E8A33D', backgroundColor: '#E8A33D', tension: 0.25, pointRadius: 3 }] },
+      options: chartOptions(),
+    });
+  }
+  refreshPicker();
+}
+function chartOptions() {
+  return {
+    responsive: true,
+    plugins: { legend: { labels: { color: '#9FB3B8', font: { family: 'IBM Plex Sans', size: 11 } } } },
+    scales: {
+      x: { ticks: { color: '#9FB3B8', font: { family: 'IBM Plex Mono', size: 10.5 } }, grid: { color: '#2A4750' } },
+      y: { ticks: { color: '#9FB3B8', font: { family: 'IBM Plex Mono', size: 10.5 } }, grid: { color: '#2A4750' }, beginAtZero: true },
+    },
+  };
+}
+
+/* ============================================================
+   ANNUAL SUMMARY VIEW
+   ============================================================ */
+function availableYears() {
+  const years = new Set(APP.index.map(q => q.id.slice(0, 4)).filter(y => /^\d{4}$/.test(y)));
+  return [...years].sort().reverse();
+}
+function openAnnualView() {
+  APP.view = 'annual';
+  renderRail();
+  renderMain();
+}
+async function renderAnnualView() {
+  const years = availableYears();
+  const main = document.getElementById('main');
+  if (!years.length) {
+    main.innerHTML = `<div id="splash"><div class="icon">📆</div><h2>No quarters logged yet</h2><p>Log at least one quarter before building an annual summary.</p></div>`;
+    return;
+  }
+  const year = APP.annualYear && years.includes(APP.annualYear) ? APP.annualYear : years[0];
+  APP.annualYear = year;
+  const yearQuarters = APP.index.filter(q => q.id.startsWith(year + '-')).sort((a, b) => a.id.localeCompare(b.id));
+
+  main.innerHTML = `
+    <div id="main-head">
+      <div>
+        <h2>Annual summary — ${year}</h2>
+        <div class="period">${yearQuarters.map(q => q.id).join(' · ')}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        ${popToggleHtml()}
+        <select id="annual-year-select" style="background:var(--panel-raised); color:var(--paper); border:1px solid var(--panel-line); border-radius:3px; padding:8px 10px; font-family:var(--font-mono); font-size:12.5px;">
+          ${years.map(y => `<option value="${y}"${y === year ? ' selected' : ''}>${y}</option>`).join('')}
+        </select>
+        <button class="btn btn-secondary" id="download-annual-btn" style="flex:none; padding:8px 14px; margin-left:8px;">Download JSON</button>
+      </div>
+    </div>
+    <div id="annual-body">Loading ${yearQuarters.length} quarter${yearQuarters.length === 1 ? '' : 's'}…</div>
+  `;
+  wirePopToggle();
+  document.getElementById('annual-year-select').addEventListener('change', e => { APP.annualYear = e.target.value; renderAnnualView(); });
+
+  const fullQuarters = await Promise.all(yearQuarters.map(q => loadQuarter(q.id)));
+  const merged = {};
+  for (const id of REPORT_ORDER) {
+    const grandTotal = {};
+    for (const fq of fullQuarters) {
+      const r = getReport(fq, id);
+      if (!r) continue;
+      for (const mk in r.grandTotal) grandTotal[mk] = (grandTotal[mk] || 0) + r.grandTotal[mk];
+    }
+    merged[id] = { grandTotal };
+  }
+  const mergedTagRows = [];
+  const mergedResourceRows = [];
+  const mergedAppRows = [];
+  const mergedSearchTermRows = [];
+  const mergedOrgRows = [];
+  for (const fq of fullQuarters) {
+    aggregateTagsFromReport(getReport(fq, 'tags')).forEach(e => mergedTagRows.push({ dims: { key: e.key, label: e.label }, metrics: e.metrics }));
+    aggregateResourcesByDataset(getReport(fq, 'resources')).forEach(e => mergedResourceRows.push({ dims: { key: e.key, label: e.label }, metrics: e.metrics }));
+    aggregateAppsFromReport(getReport(fq, 'apps')).forEach(e => mergedAppRows.push({ dims: { key: e.key, label: e.label }, metrics: e.metrics }));
+    aggregateOrgsFromReport(getReport(fq, 'orgs')).forEach(e => mergedOrgRows.push({ dims: { key: e.key, label: e.label }, metrics: e.metrics }));
+    const st = getReport(fq, 'searchTerms');
+    if (st) st.rows.filter(r => (r.dims['Search term'] || '').trim() !== '').forEach(r => mergedSearchTermRows.push({ dims: { key: r.dims['Search term'].toLowerCase(), label: r.dims['Search term'] }, metrics: r.metrics }));
+  }
+  const topTags = aggregateBy(mergedTagRows, r => r.dims.key, r => r.dims.label);
+  const topResources = aggregateBy(mergedResourceRows, r => r.dims.key, r => r.dims.label);
+  const topApps = aggregateBy(mergedAppRows, r => r.dims.key, r => r.dims.label);
+  const topOrgs = aggregateBy(mergedOrgRows, r => r.dims.key, r => r.dims.label);
+  const topTerms = aggregateBy(mergedSearchTermRows, r => r.dims.key, r => r.dims.label);
+
+  const body = document.getElementById('annual-body');
+  body.innerHTML = `
+    <div class="gauge-grid">
+      ${gauge(grandTotalSum(merged.engagementByPage.grandTotal), 'total engagement events, ' + year, 'teal')}
+      ${gauge(grandTotalSum(merged.tags.grandTotal), 'tag-filter search events', 'amber')}
+      ${gauge(grandTotalSum(merged.resources.grandTotal), 'dataset resource opens', 'amber')}
+      ${gauge(grandTotalSum((merged.fileDownloads.grandTotal.us_count !== undefined ? merged.fileDownloads : merged.downloads).grandTotal), 'file downloads', 'teal')}
+      ${gauge(grandTotalSum(merged.errors.grandTotal), '404/403 errors', 'rust')}
+    </div>
+    <div class="section"><h3>Quarter by quarter — total engagement events</h3><canvas id="annual-canvas" height="90"></canvas></div>
+    <div class="section"><h3>Top tags of the year</h3><div>${renderAggList(topTags, 15)}</div></div>
+    <div class="section"><h3>Top datasets of the year</h3><div>${renderAggList(topResources, 15, 'teal')}</div></div>
+    <div class="two-col">
+      <div class="section"><h3>Top applications of the year</h3><div>${renderAggList(topApps, 10)}</div></div>
+      <div class="section"><h3>Top organizations filtered of the year</h3><div>${renderAggList(topOrgs, 10, 'teal')}</div></div>
+    </div>
+    <div class="section"><h3>Top free-text search terms of the year</h3><div>${renderAggList(topTerms, 12)}</div></div>
+    <p class="note">Built from ${yearQuarters.length} logged quarter${yearQuarters.length === 1 ? '' : 's'} (${yearQuarters.map(q => q.id).join(', ')}). Item leaderboards are summed from each quarter's top 150 rows per report, so very long-tail items may be undercounted.</p>
+  `;
+  new Chart(document.getElementById('annual-canvas'), {
+    type: 'bar',
+    data: {
+      labels: yearQuarters.map(q => q.id),
+      datasets: [{ label: 'Engagement events', data: fullQuarters.map(fq => grandTotalSum(getReport(fq, 'engagementByPage') ? getReport(fq, 'engagementByPage').grandTotal : {})), backgroundColor: '#4FB7A6' }],
+    },
+    options: chartOptions(),
+  });
+  document.getElementById('download-annual-btn').addEventListener('click', () => {
+    const payload = { year, quarters: yearQuarters.map(q => q.id), merged, topTags, topResources, topApps, topOrgs, topTerms };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `nmwdi_usage_annual_${year}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+  });
+}
+
+/* ============================================================
+   UPLOAD FLOW
+   ============================================================ */
+function openUploadModal() {
+  APP.pendingParsed = [];
+  document.getElementById('upload-status').innerHTML = '';
+  document.getElementById('upload-form-row').classList.remove('show');
+  document.getElementById('upload-actions').style.display = 'none';
+  document.getElementById('quarter-id-input').value = '';
+  document.getElementById('file-input').value = '';
+  hideUploadError();
+  setUploadProgress('');
+  document.getElementById('upload-backdrop').classList.add('open');
+}
+function closeUploadModal() {
+  document.getElementById('upload-backdrop').classList.remove('open');
+}
+function setUploadProgress(text) {
+  const el = document.getElementById('upload-progress');
+  if (!text) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.style.display = 'block';
+  el.textContent = text;
+}
+function showUploadError(message) {
+  const el = document.getElementById('upload-error');
+  el.style.display = 'block';
+  el.textContent = message;
+}
+function hideUploadError() {
+  const el = document.getElementById('upload-error');
+  el.style.display = 'none';
+  el.textContent = '';
+}
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} took longer than ${Math.round(ms / 1000)}s and was cancelled. Your browser or connection may be blocking part of this — try extracting the zip yourself and dropping in the individual CSV files instead.`)), ms)),
+  ]);
+}
+
+async function handleIncomingFiles(fileList) {
+  hideUploadError();
+  const statusEl = document.getElementById('upload-status');
+  const files = Array.from(fileList);
+  if (!files.length) return;
+  try {
+    for (const file of files) {
+      if (/\.zip$/i.test(file.name)) {
+        setUploadProgress(`Reading ${file.name}…`);
+        let zip;
+        try {
+          const buffer = await withTimeout(file.arrayBuffer(), 20000, `Reading ${file.name}`);
+          zip = await withTimeout(JSZip.loadAsync(buffer), 20000, `Unzipping ${file.name}`);
+        } catch (e) {
+          statusEl.insertAdjacentHTML('beforeend', `<div class="file-status-row"><span class="name">${escapeHtml(file.name)}</span><span class="tag warn">couldn't unzip</span></div>`);
+          showUploadError(`Couldn't open ${file.name}: ${e.message}`);
+          continue;
+        }
+        const entries = Object.values(zip.files).filter(f => !f.dir && /\.csv$/i.test(f.name));
+        if (!entries.length) {
+          showUploadError(`${file.name} didn't contain any .csv files.`);
+        }
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i];
+          setUploadProgress(`Unzipping ${file.name} — file ${i + 1} of ${entries.length} (${entry.name})…`);
+          try {
+            const text = await withTimeout(entry.async('string'), 20000, `Unzipping ${entry.name}`);
+            processOneReport(text, entry.name, statusEl);
+          } catch (e) {
+            statusEl.insertAdjacentHTML('beforeend', `<div class="file-status-row"><span class="name">${escapeHtml(entry.name)}</span><span class="tag warn">failed to read</span></div>`);
+            showUploadError(`Couldn't read ${entry.name} out of the zip: ${e.message}`);
+          }
+        }
+      } else if (/\.csv$/i.test(file.name)) {
+        setUploadProgress(`Reading ${file.name}…`);
+        const text = await withTimeout(file.text(), 20000, `Reading ${file.name}`);
+        processOneReport(text, file.name, statusEl);
+      } else {
+        statusEl.insertAdjacentHTML('beforeend', `<div class="file-status-row"><span class="name">${escapeHtml(file.name)}</span><span class="tag warn">not a .zip or .csv, skipped</span></div>`);
+      }
+    }
+    finalizeUploadStatus();
+  } catch (e) {
+    showUploadError('Something went wrong reading those files: ' + e.message);
+  } finally {
+    setUploadProgress('');
+  }
+}
+
+function processOneReport(text, filename, statusEl) {
+  const result = parseReportText(text, filename);
+  APP.pendingParsed.push(result);
+  const ok = result.registryEntry && !result.error;
+  statusEl.insertAdjacentHTML('beforeend', `<div class="file-status-row">
+    <span class="name">${escapeHtml(filename)}</span>
+    <span class="tag ${ok ? 'ok' : 'warn'}">${ok ? result.registryEntry.label + ' · ' + result.rowCount + ' rows' : (result.error || 'unrecognized report')}</span>
+  </div>`);
+}
+
+function finalizeUploadStatus() {
+  const recognized = APP.pendingParsed.filter(r => r.registryEntry && !r.error);
+  if (!recognized.length) {
+    if (APP.pendingParsed.length) showUploadError('None of those files were recognized GA4 export reports — nothing to save yet.');
+    return;
+  }
+  const period = modePeriod(recognized);
+  const suggestion = period ? quarterLabelFromPeriod(period.start) : '';
+  const input = document.getElementById('quarter-id-input');
+  if (!input.value) input.value = suggestion;
+  document.getElementById('upload-form-row').classList.add('show');
+  document.getElementById('upload-actions').style.display = 'flex';
+  document.getElementById('save-upload-btn').disabled = false;
+  APP.pendingPeriod = period;
+}
+
+async function saveUploadedQuarter() {
+  hideUploadError();
+  const id = document.getElementById('quarter-id-input').value.trim();
+  if (!id) { showUploadError('Give this quarter a label, e.g. 2026-Q2.'); return; }
+  const recognized = APP.pendingParsed.filter(r => r.registryEntry && !r.error);
+  if (!recognized.length) { showUploadError('No recognized reports to save.'); return; }
+  if (APP.index.some(q => q.id === id)) {
+    if (!confirm(`"${id}" already exists in the log. Overwrite it?`)) return;
+  }
+  const saveBtn = document.getElementById('save-upload-btn');
+  saveBtn.disabled = true;
+  const originalLabel = saveBtn.textContent;
+  saveBtn.textContent = 'Saving…';
+  try {
+    const reports = {};
+    for (const r of recognized) {
+      const rid = r.registryEntry.id;
+      const cappedRows = r.rows.slice().sort((a, b) => primaryTotal(b.metrics) - primaryTotal(a.metrics)).slice(0, 150);
+      reports[rid] = {
+        grandTotal: r.grandTotal, rows: cappedRows, rowCount: r.rowCount,
+        dimCols: r.dimCols, metricCols: r.metricCols, period: r.period, filenameHint: r.filenameHint,
+      };
+    }
+    const period = APP.pendingPeriod || modePeriod(recognized) || { start: '', end: '' };
+    const record = { id, periodStart: period.start, periodEnd: period.end, savedAt: new Date().toISOString(), reports };
+    await withTimeout(saveQuarter(record), 20000, 'Saving to storage');
+    closeUploadModal();
+    await selectQuarter(id);
+  } catch (e) {
+    showUploadError('Saving failed: ' + e.message);
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = originalLabel;
+  }
+}
+
+/* ============================================================
+   EVENT WIRING (dropzone, buttons)
+   ============================================================ */
+document.getElementById('open-upload-btn').addEventListener('click', openUploadModal);
+document.getElementById('annual-btn').addEventListener('click', openAnnualView);
+document.getElementById('export-log-btn').addEventListener('click', async () => {
+  if (!APP.index.length) { showToast('Nothing to export yet — log a quarter first.', true); return; }
+  try { await exportFullLog(); showToast('Log exported. Keep this file somewhere safe — it\'s how you bring your quarters back next time.', false); }
+  catch (e) { showToast('Export failed: ' + e.message, true); }
+});
+document.getElementById('import-log-btn').addEventListener('click', () => document.getElementById('import-log-input').click());
+document.getElementById('import-log-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const { added, skipped } = await importFullLog(file);
+    renderRail();
+    if (APP.index.length) await selectQuarter(APP.selectedQuarterId && APP.quarters[APP.selectedQuarterId] ? APP.selectedQuarterId : APP.index[APP.index.length - 1].id);
+    showToast(`Imported ${added} quarter${added === 1 ? '' : 's'}${skipped ? `, skipped ${skipped}` : ''}.`, false);
+  } catch (err) {
+    showToast('Import failed: ' + err.message, true);
+  }
+  e.target.value = '';
+});
+document.getElementById('cancel-upload-btn').addEventListener('click', closeUploadModal);
+document.getElementById('save-upload-btn').addEventListener('click', saveUploadedQuarter);
+document.getElementById('upload-backdrop').addEventListener('click', e => { if (e.target.id === 'upload-backdrop') closeUploadModal(); });
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => handleIncomingFiles(e.target.files));
+['dragenter', 'dragover'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+['dragleave', 'drop'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+dropzone.addEventListener('drop', e => { if (e.dataTransfer.files.length) handleIncomingFiles(e.dataTransfer.files); });
+
+document.addEventListener('click', e => {
+  if (e.target.id === 'splash-upload-btn') openUploadModal();
+});
+
+/* ============================================================
+   APP STATE + BOOT
+   ============================================================ */
+const APP = { index: [], quarters: {}, selectedQuarterId: null, currentQuarter: null, pendingParsed: [], view: 'quarter', populationMode: 'nm', activeTabId: 'overview', basemapId: 'light' };
+
+function popToggleHtml() {
+  return `<div id="pop-toggle">
+    <button data-mode="nm" class="${APP.populationMode === 'nm' ? 'active' : ''}">New Mexico</button>
+    <button data-mode="us" class="${APP.populationMode === 'us' ? 'active' : ''}">All U.S.</button>
+  </div>`;
+}
+function wirePopToggle() {
+  document.querySelectorAll('#pop-toggle button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.mode === APP.populationMode) return;
+      APP.populationMode = btn.dataset.mode;
+      renderMain();
+    });
+  });
+}
+
+async function boot() {
+  await checkStorageAvailable();
+  APP.index = await loadIndex();
+  renderRail();
+  if (APP.index.length) {
+    await selectQuarter(APP.index[APP.index.length - 1].id);
+  }
+}
+boot();
+</script>
+</body>
+</html>
